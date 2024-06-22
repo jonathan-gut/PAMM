@@ -1,6 +1,7 @@
 import os
 import subprocess
 import json
+import re
 from mistralai.client import MistralClient
 from mistralai.models.chat_completion import ChatMessage
 from dotenv import load_dotenv
@@ -96,6 +97,23 @@ tools = [
                 "required": ["package_name"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "explain_package",
+            "description": "Get information about a package using pip show",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "package_name": {
+                        "type": "string",
+                        "description": "The name of the package to explain"
+                    }
+                },
+                "required": ["package_name"]
+            }
+        }
     }
 ]
 
@@ -150,6 +168,8 @@ def execute_function(function_name, args):
         return remove_package(**args)
     elif function_name == "get_package_version":
         return get_package_version(**args)
+    elif function_name == "explain_package":
+        return explain_package(**args)
     else:
         return json.dumps({"error": f"Unknown function {function_name}"})
 
@@ -201,6 +221,27 @@ def get_package_version(package_name):
         return json.dumps({"error": f"Package {package_name} not found or error occurred."})
     except Exception as e:
         return json.dumps({"error": str(e)})
+
+
+def explain_package(package_name):
+    try:
+        result = subprocess.run(["pip", "show", package_name], capture_output=True, text=True)
+        if result.returncode == 0:
+            return json.dumps({"output": result.stdout})
+        return json.dumps({"error": f"Package {package_name} not found or error occurred."})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def detect_intent(user_input):
+    # Detect if the user is asking for an explanation of a package
+    explain_pattern = re.compile(r"what does (\w+) do|explain (\w+)", re.IGNORECASE)
+    match = explain_pattern.match(user_input)
+    if match:
+        package_name = match.group(1) or match.group(2)
+        return "explain_package", {"package_name": package_name}
+
+    return None, {}
 
 
 if __name__ == "__main__":
